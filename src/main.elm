@@ -1,12 +1,13 @@
 module Main exposing (..)
 
-import Html exposing (Html, div, input, button, text)
-import Html.Attributes exposing (class, placeholder)
+import Html exposing (Html, div, input, button, text, section, h1, h5, figure, img)
+import Html.Attributes exposing (class, placeholder, src)
 import Html.App exposing (program)
 import Html.Events exposing (onClick, onInput)
 import Http
 import Platform.Cmd exposing (Cmd)
 import Task
+import Array
 import Json.Decode exposing (..)
 
 
@@ -61,9 +62,9 @@ type alias SpotifyData =
 
 
 type Msg
-    = SpotifyData
-    | Query String
+    = UpdateQuery String
     | Search
+    | SearchResult SpotifyData
 
 
 
@@ -82,30 +83,27 @@ init =
     ( { query = "", tracks = NotAsked }, Cmd.none )
 
 
-
--- update : Msg -> Model -> ( Model, Cmd Msg )
-
-
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Query query ->
-            ( { model | query = query }, fetchSpotify query )
+        UpdateQuery query ->
+            ( { model | query = query }, Cmd.none )
 
         Search ->
-            ( { model | tracks = Loading }, Cmd.none )
+            ( { model | tracks = Loading }, fetchSpotify model.query )
 
-
-
--- updateSpotify : SpotifyData -> Model -> ( Model, Cmd a )
--- updateSpotify data model =
---     ( model, Cmd.none )
+        SearchResult tracks ->
+            ( { model | tracks = tracks }, Cmd.none )
 
 
 view : Model -> Html Msg
 view model =
-    div [ class "app" ]
-        [ input [ class "input", placeholder "Search track title", onInput Query ] []
-        , button [ class "button is-primary", onClick Search ] [ text "Search" ]
+    div [ class "container is-fluid" ]
+        [ h1 [ class "title" ] [ text "Spotify Search" ]
+        , div [ class "columns" ]
+            [ input [ class "input column is-4", placeholder "Search track title", onInput UpdateQuery ] []
+            , button [ class "button is-primary", onClick Search ] [ text "Search" ]
+            ]
         , spotifyView model
         ]
 
@@ -123,7 +121,90 @@ spotifyView model =
             div [] [ text "There was an error..." ]
 
         Success tracks ->
-            div [] [ text "Lots of cool spotify tracks!" ]
+            if List.length tracks == 0 then
+                div [] [ text ("No results for \"" ++ model.query ++ "\"!") ]
+            else
+                let
+                    trackViews =
+                        Array.fromList <| List.map trackView tracks
+                in
+                    div []
+                        [ div [ class "columns" ]
+                            (Array.toList <| Array.slice 0 5 trackViews)
+                        , div [ class "columns" ]
+                            (Array.toList <| Array.slice 5 10 trackViews)
+                        , div [ class "columns" ]
+                            (Array.toList <| Array.slice 10 15 trackViews)
+                        , div [ class "columns" ]
+                            (Array.toList <| Array.slice 15 20 trackViews)
+                        ]
+
+
+trackView : SpotifyTrack -> Html Msg
+trackView track =
+    let
+        imageUrl =
+            case List.head track.album.images of
+                Just url ->
+                    url
+
+                Nothing ->
+                    "http://placehold.it/128x128"
+
+        artist =
+            case List.head track.artists of
+                Just name ->
+                    name
+
+                Nothing ->
+                    "Unknown"
+    in
+        div [ class "column" ]
+            [ figure []
+                [ img [ class "image is-128x128", src imageUrl ] []
+                ]
+            , div []
+                [ div [ class "title is-5" ] [ text track.name ]
+                , div [ class "subtitle is-6" ] [ text artist ]
+                ]
+            ]
+
+
+
+-- div [ class "card" ]
+--     [ div [ class "card-image" ]
+--         [ figure [ class "image is-128x128" ] [ img [ src "http://placehold.it/300x225" ] [] ]
+--         ]
+--     , div [ class "card-content" ] [ text track.name ]
+--     ]
+--   <div class="card">
+--   <div class="card-image">
+--     <figure class="image is-128x128">
+--       <img src="http://placehold.it/300x225" alt="">
+--     </figure>
+--   </div>
+--   <div class="card-content">
+--     <div class="media">
+--       <div class="media-left">
+--         <figure class="image is-32x32">
+--           <img src="http://placehold.it/64x64" alt="Image">
+--         </figure>
+--       </div>
+--       <div class="media-content">
+--         <p class="title is-5">John Smith</p>
+--         <p class="subtitle is-6">@johnsmith</p>
+--       </div>
+--     </div>
+--
+--     <div class="content">
+--       Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+--       Phasellus nec iaculis mauris. <a href="#">@bulmaio</a>.
+--       <a href="#">#css</a> <a href="#">#responsive</a>
+--       <br>
+--       <small>11:09 PM - 1 Jan 2016</small>
+--     </div>
+--   </div>
+-- </div>
 
 
 decodeSpotifyJson : Decoder TrackList
@@ -147,6 +228,6 @@ fetchSpotify : String -> Cmd Msg
 fetchSpotify query =
     let
         url =
-            "https://api.spotify.com/v1/search?q=" ++ query ++ "&type=track&market=US"
+            "https://api.spotify.com/v1/search?q=" ++ (Http.uriEncode query) ++ "&type=track&market=US"
     in
-        Task.perform Failure Success (Http.get decodeSpotifyJson url)
+        Cmd.map SearchResult <| Task.perform Failure Success (Http.get decodeSpotifyJson url)
