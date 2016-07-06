@@ -1,6 +1,6 @@
 module Main exposing (..)
 
-import Html exposing (Html, div, input, button, text, section, h1, h5, figure, img)
+import Html exposing (Html, div, input, button, text, section, h1, figure, img)
 import Html.Attributes exposing (class, placeholder, src)
 import Html.App exposing (program)
 import Html.Events exposing (onClick, onInput)
@@ -62,17 +62,6 @@ type alias SpotifyData =
 
 
 
--- All the Msgs our app responds to
-
-
-type Msg
-    = UpdateQuery String
-    | Search
-    | SearchResult SpotifyData
-
-
-
--- | SpotifyData
 -- The data model for our app
 
 
@@ -80,6 +69,16 @@ type alias Model =
     { query : String
     , tracks : SpotifyData
     }
+
+
+
+-- All the Msgs our app responds to
+
+
+type Msg
+    = UpdateQuery String
+    | Search
+    | SearchResult SpotifyData
 
 
 init : ( Model, Cmd Msg )
@@ -112,19 +111,27 @@ view model =
         ]
 
 
+
+-- spotifyView handles rendering the potential states for our tracks
+
+
 spotifyView : Model -> Html Msg
 spotifyView model =
     case model.tracks of
         NotAsked ->
+            -- We haven't searched yet, give a generic search message
             div [] [ text "Search for tracks!" ]
 
         Loading ->
+            -- While the HTTP request is going on, let the user know something is happening
             div [] [ text ("Searching for " ++ model.query ++ "...") ]
 
         Failure error ->
+            -- Ideally we would display a more informative error, but this works for now
             div [] [ text "There was an error..." ]
 
         Success tracks ->
+            -- We've gotten n <= 20 tracks back, we'll display them in a grid
             if List.length tracks == 0 then
                 div [] [ text ("No results for \"" ++ model.query ++ "\"!") ]
             else
@@ -132,6 +139,7 @@ spotifyView model =
                     trackViews =
                         Array.fromList <| List.map trackView tracks
                 in
+                    -- This bit could be condensed with map, but for readibility it's manually laid out
                     div []
                         [ div [ class "columns" ]
                             (Array.toList <| Array.slice 0 5 trackViews)
@@ -144,9 +152,14 @@ spotifyView model =
                         ]
 
 
+
+-- trackView handles rendering an individual track
+
+
 trackView : SpotifyTrack -> Html Msg
 trackView track =
     let
+        -- We can't be 100% sure what the API call will return, so we need to provide some defaults
         imageUrl =
             case List.head track.album.images of
                 Just url ->
@@ -174,6 +187,10 @@ trackView track =
             ]
 
 
+
+-- decodeSpotifyJson is a JSONDecoder that takes a spotify API call and turns it into an Elm record
+
+
 decodeSpotifyJson : Decoder TrackList
 decodeSpotifyJson =
     at [ "tracks", "items" ]
@@ -189,6 +206,10 @@ decodeSpotifyJson =
                 ("name" := string)
             )
         )
+
+
+
+-- fetchSpotify builds the command to actually do the API call
 
 
 fetchSpotify : String -> Cmd Msg
